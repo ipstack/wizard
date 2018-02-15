@@ -462,19 +462,17 @@ class Wizard
      */
     protected function addRegisterInTmpDb($register, $table)
     {
-        $source = $register->getCsv();
-
-        $columns = $register->getFields();
         /**
-         * @var FieldAbstract[]
+         * @var FieldAbstract[] $validators
          */
         $validators = array();
-
+        $source = $register->getCsv();
+        $columns = $register->getFields();
         $fields = array('`_pk`');
         $params = array(':_pk');
         foreach ($columns as $field=>$data) {
-            $validatorClassName = __NAMESPACE__.'\\Field\\'.mb_convert_case($data['type'], \MB_CASE_TITLE).'Field';
-            $validators[$field] = new $validatorClassName($field, $data);
+            $fieldClassName = __NAMESPACE__.'\\Field\\'.mb_convert_case($data['type'], \MB_CASE_TITLE).'Field';
+            $validators[$field] = new $fieldClassName($field, $data);
             $fields[] = '`' . $field . '`';
             $fields[] = '`_len_' . $field . '`';
             $params[] = ':' . $field;
@@ -627,20 +625,13 @@ class Wizard
             $format = array();
             $empty = array();
             foreach ($fields as $field=>$data) {
-                $type = $data['type'];
                 if (isset($this->relations[$table][$field])) {
                     $sql = 'SELECT COUNT(*) AS `max`, "0" AS `min` FROM `' . $this->relations[$table][$field] . '`;';
                     $res = $this->pdo->query($sql);
                     $row = $res->fetch();
                     $format[$field] = Pack::getOptimalFormat(0, $row['max'], $field);
                 } else {
-                    switch ($type) {
-                        case 'latitude':
-                            $format[$field] = Pack::getOptimalFormat(-90, 90, $field, 4);
-                            break;
-                        case 'longitude':
-                            $format[$field] = Pack::getOptimalFormat(-180, 180, $field, 4);
-                            break;
+                    switch ($data['type']) {
                         case 'string':
                             $sql = 'SELECT MAX(`_len_' . $field . '`) AS `max`, "0" AS `min` FROM `'.$table.'`;';
                             $res = $this->pdo->query($sql);
@@ -648,10 +639,17 @@ class Wizard
                             $format[$field] = 'A'.$row['max'].$field;
                             break;
                         default:
+                            $fieldClassName = __NAMESPACE__.'\\Field\\'.mb_convert_case($data['type'], \MB_CASE_TITLE).'Field';
+                            /**
+                             * @var FieldAbstract $validator
+                             */
+                            $validator = new $fieldClassName($field, $data);
                             $sql = 'SELECT MAX(`' . $field . '`) AS `max`, MIN(`' . $field . '`) AS `min` FROM `' . $table . '`;';
                             $res = $this->pdo->query($sql);
                             $row = $res->fetch();
-                            $format[$field] = Pack::getOptimalFormat($row['min'], $row['max'], $field);
+                            $validator->update($row['min']);
+                            $validator->update($row['max']);
+                            $format[$field] = $validator->getFormat();
                             break;
                     }
                 }
