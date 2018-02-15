@@ -85,7 +85,7 @@
         ->setCsv('UTF-8')
         ->setFirstRow(2)
         ->setId(1)
-        ->addField('name', 2, new StringField())
+        ->addStringField('name', 2)
     ;
     ```
 
@@ -103,12 +103,8 @@
     ```php
     $wizard
         ->addRegister('interval', $intervals)
-        ->addNetwork(
-            $network,
-            array(
-                3 => 'interval',
-            )
-        );
+        ->addField($network, 3, 'interval')
+    ;
     ```
 
 1. Run compile database.
@@ -162,21 +158,27 @@ first_ip,last_ip,city
 ```php
 <?php
 require_once('vendor/autoload.php');
+
+use Ipstack\Wizard\Wizard;
+use Ipstack\Wizard\Entity\Register;
+use Ipstack\Wizard\Entity\Network;
+use Ipstack\Wizard\Field\StringField;
+
 $countries = (new Register('/path/to/countries.csv'))
     ->setCsv('UTF-8')
     ->setFirstRow(2)
     ->setId(1)
-    ->addField('code', 2, new StringField(StringField::TRANSFORM_LOWER, 2))
-    ->addField('name', 3, new StringField())
+    ->addStringField('code', 2, StringField::TRANSFORM_LOWER, 2)
+    ->addStringField('name', 3)
 ;
 $cities = (new Register('/path/to/cities.csv'))
     ->setCsv('UTF-8')
     ->setFirstRow(2)
     ->setId(1)
-    ->addField('name', 2, new StringField(0))
-    ->addField('countryId', 3, new NumericField(0))
-    ->addField('latitude', 4, new LatitudeField())
-    ->addField('longitude', 5, new LongitudeField())
+    ->addStringField('name', 2)
+    ->addNumericField('countryId', 3)
+    ->addLatitudeField('latitude', 4)
+    ->addLongitudeField('longitude', 5
 ;
 $network = (new Network('/path/to/networks.csv', Network::IP_TYPE_ADDRESS, 1, 2))
     ->setCsv('UTF-8')
@@ -190,12 +192,7 @@ $wizard = (new Wizard('/path/to/tmp'))
     ->addRegister('city', $cities)
     ->addRegister('country', $countries)
     ->addRelation('city', 'countryId', 'country')
-    ->addNetwork(
-        $network,
-        array(
-            3 => 'city',
-        )
-    )
+    ->addField($network, 3, 'city')
 ;
 $wizard->compile('ipstack.dat');
 ``` 
