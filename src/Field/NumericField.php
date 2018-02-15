@@ -69,20 +69,12 @@ class NumericField extends FieldAbstract
      */
     public function getFormat()
     {
-        Pack::getOptimalFormat(
+        $format = Pack::getOptimalFormat(
             $this->values['min'],
             $this->values['max'],
             $this->format['key'],
             $this->settings['precision']
         );
-        $format = $this->format['character'];
-        if (!empty($this->format['number'])) {
-            $format .= $this->format['number'];
-        }
-        $format .= $this->format['key'];
-        if (!empty($this->format['added'])) {
-            $format .= ':'.$this->format['added'];
-        }
         return $format;
     }
 }
