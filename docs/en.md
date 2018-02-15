@@ -178,7 +178,7 @@ $cities = (new Register('/path/to/cities.csv'))
     ->addStringField('name', 2)
     ->addNumericField('countryId', 3)
     ->addLatitudeField('latitude', 4)
-    ->addLongitudeField('longitude', 5
+    ->addLongitudeField('longitude', 5)
 ;
 $network = (new Network('/path/to/networks.csv', Network::IP_TYPE_ADDRESS, 1, 2))
     ->setCsv('UTF-8')
