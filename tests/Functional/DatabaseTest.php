@@ -145,8 +145,8 @@ class DatabaseTest extends TestCase
         $this->assertSame('A2code/A10name', $db['meta']['registers']['country']['format']);
         $this->assertSame(12, $db['meta']['registers']['country']['len']);
         $this->assertSame(3, $db['meta']['registers']['country']['items']);
-        $this->assertSame('A15name/CcountryId/clatitude:95/clongitude:141', $db['meta']['registers']['city']['format']);
-        $this->assertSame(18, $db['meta']['registers']['city']['len']);
+        $this->assertSame('A15name/CcountryId/r4latitude:8049909/R4longitude', $db['meta']['registers']['city']['format']);
+        $this->assertSame(22, $db['meta']['registers']['city']['len']);
         $this->assertSame(5, $db['meta']['registers']['city']['items']);
         $this->assertSame('Ccity', $db['meta']['networks']['format']);
         $this->assertSame(5, $db['meta']['networks']['len']);
