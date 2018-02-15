@@ -1,10 +1,10 @@
 <?php
 
-namespace Ipstack\Test\Unit\Wizard\Sheet;
+namespace Ipstack\Test\Unit\Wizard\Entity;
 
 use PHPUnit\Framework\TestCase;
-use Ipstack\Wizard\Sheet\Register;
-use Ipstack\Wizard\Sheet\Field\NumericField;
+use Ipstack\Wizard\Entity\Register;
+use Ipstack\Wizard\Field\StringField;
 
 /**
  * @covers Register
@@ -315,9 +315,8 @@ class RegisterTest extends TestCase
      */
     public function testAddFieldWithIncorrectName()
     {
-        $int = new NumericField(2, 1, 0, 10);
         $register = new Register($this->registerCsv);
-        $register->addField('%$#%', 2, $int);
+        $register->addField('%$#%', 2);
     }
 
     /**
@@ -328,37 +327,86 @@ class RegisterTest extends TestCase
      */
     public function testAddFieldWithIncorrectColumn()
     {
-        $int = new NumericField(2, 1, 0, 10);
         $register = new Register($this->registerCsv);
-        $register->addField('name', 2.5, $int);
+        $register->addField('name', 2.5);
     }
 
     /**
      * Test AddField with incorrect type.
      *
      * @expectedException \InvalidArgumentException
-     * @expectedExceptionMessage type incorrect
+     * @expectedExceptionMessage incorrect type
      */
     public function testAddFieldWithIncorrectType()
     {
         $register = new Register($this->registerCsv);
-        $register->addField('name', 2,  'int');
+        $register->addField('name', 2,  'xxx');
     }
 
     /**
-     * Test AddField with correct values.
+     * Test AddStringField with correct values.
      */
-    public function testCorrectAddField()
+    public function testCorrectAddStringField()
     {
-        $int = new NumericField(2, 1, 0, 10);
+        $sets = array(
+            'low'     => ['w' => 'st', 'c' => StringField::TRANSFORM_LOWER, 'l' => 0],
+            'UP'      => ['w' => 'st', 'c' => StringField::TRANSFORM_UPPER, 'l' => 0],
+            'Title'   => ['w' => 'st', 'c' => StringField::TRANSFORM_TITLE, 'l' => 0],
+            'nOnE'    => ['w' => 'st', 'c' => StringField::TRANSFORM_NONE, 'l' => 0],
+            'limited' => ['w' => 'sT5', 'c' => StringField::TRANSFORM_NONE, 'l' => 5]
+        );
         $register = new Register($this->registerCsv);
-        $register->addField('name', 2,  $int);
+        $register->addField('low1', 1, 'st');
+        $register->addField('UP1', 2, 'ST');
+        $register->addField('Title1', 3, 'St');
+        $register->addField('nOnE1', 4, 'sT');
+        $register->addField('limited1', 5, 'sT5');
+        $register->addStringField('low2', 1, StringField::TRANSFORM_LOWER);
+        $register->addStringField('UP2', 2, StringField::TRANSFORM_UPPER);
+        $register->addStringField('Title2', 3, StringField::TRANSFORM_TITLE);
+        $register->addStringField('nOnE2', 4, StringField::TRANSFORM_NONE);
+        $register->addStringField('limited2', 5, StringField::TRANSFORM_NONE, 5);
+
         $array = $register->getFields();
-        $this->assertArrayHasKey('name', $array);
-        $this->assertSame(2, $array['name']['column']);
-        $this->assertTrue(is_a($array['name']['type'], NumericField::class));
-        $register->removeField('name');
+        foreach (array_keys($sets) as $num => $key) {
+            for ($i=1;$i<=2;$i++) {
+                $fullKey = $key.$i;
+                $this->assertArrayHasKey($fullKey, $array);
+                $this->assertSame($num+1, $array[$fullKey]['column']);
+                $this->assertSame('string', $array[$fullKey]['type']);
+                $this->assertSame($sets[$key]['c'], $array[$fullKey]['transform']);
+                if ($sets[$key]['l']) {
+                    $this->assertSame($sets[$key]['l'], $array[$fullKey]['maxLength']);
+                }
+            }
+            $this->assertSame($array[$key.'1'], $array[$key.'2']);
+        }
+    }
+
+    /**
+     * Test AddNumericField with correct values.
+     */
+    public function testCorrectAddNumericField()
+    {
+        $register = new Register($this->registerCsv);
+        $register->addField('int1', 1, 'n');
+        $register->addField('dec1', 2, 'n1');
+        $register->addNumericField('int2', 1);
+        $register->addNumericField('dec2', 2, 1);
+
         $array = $register->getFields();
-        $this->assertArrayNotHasKey('name', $array);
+        foreach (array('int', 'dec') as $num => $key) {
+            for ($i=1;$i<=2;$i++) {
+                $fullKey = $key.$i;
+                $this->assertArrayHasKey($fullKey, $array);
+                $this->assertSame($num+1, $array[$fullKey]['column']);
+                $this->assertSame('numeric', $array[$fullKey]['type']);
+            }
+            $this->assertSame($array[$key.'1'], $array[$key.'2']);
+        }
+        $this->assertSame(1, $array['dec1']['precision']);
+        $this->assertSame(1, $array['dec2']['precision']);
+        $this->assertArrayNotHasKey('precision', $array['int1']);
+        $this->assertArrayNotHasKey('precision', $array['int2']);
     }
 }

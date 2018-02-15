@@ -1,11 +1,9 @@
 <?php
 
-namespace Ipstack\Test\Unit\Wizard\Sheet;
+namespace Ipstack\Test\Unit\Wizard\Entity;
 
 use PHPUnit\Framework\TestCase;
-use Ipstack\Wizard\Sheet\Network;
-use Ipstack\Wizard\Sheet\Register;
-use Ipstack\Wizard\Sheet\Field\NumericField;
+use Ipstack\Wizard\Entity\Network;
 
 /**
  * @covers Network

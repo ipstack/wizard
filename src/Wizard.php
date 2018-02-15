@@ -5,25 +5,24 @@ namespace Ipstack\Wizard;
 use Ipstack\Wizard\Entity\Network;
 use Ipstack\Wizard\Entity\Register;
 use Ddrv\Extra\Pack;
+use Ipstack\Wizard\Field\FieldAbstract;
 use PDO;
-use PDOStatement;
 use PDOException;
 
 /**
  * Class Wizard
  *
  * @const int FORMAT_VERSION
- * @property string $tmpDir +
- * @property string $author +
- * @property string $license +
- * @property int    $time +
- * @property array  $networks +
- * @property Register[]  $registers +
- * @property array  $relations +
- * @property PDO    $pdo +
- * @property string $prefix +
- * @property array $meta +
- * @property array $fields
+ * @property string $tmpDir
+ * @property string $author
+ * @property string $license
+ * @property int    $time
+ * @property array  $networks
+ * @property Register[]  $registers
+ * @property array  $relations
+ * @property PDO    $pdo
+ * @property string $prefix
+ * @property array $meta
  */
 class Wizard
 {
@@ -167,21 +166,15 @@ class Wizard
     }
 
     /**
-     * @param Network $network
-     * @param int $column
+     * Add register.
+     *
      * @param string $name
      * @param Register $register
      * @return $this
      * @throws \InvalidArgumentException
      */
-    public function addField($network, $column, $name, $register)
+    public function addRegister($name, $register)
     {
-        if (!($network instanceof Network)) {
-            throw new \InvalidArgumentException('incorrect network');
-        }
-        if (!is_int($column) || $column < 1) {
-            throw new \InvalidArgumentException('column must be positive integer');
-        }
         if (!Register::checkName($name)) {
             throw new \InvalidArgumentException('incorrect name');
         }
@@ -193,6 +186,30 @@ class Wizard
             throw new \InvalidArgumentException('fields of register can not be empty');
         }
         $this->registers[$name] = $register;
+        return $this;
+    }
+
+    /**
+     * @param Network $network
+     * @param int $column
+     * @param string $name
+     * @return $this
+     * @throws \InvalidArgumentException
+     */
+    public function addField($network, $column, $name)
+    {
+        if (!($network instanceof Network)) {
+            throw new \InvalidArgumentException('incorrect network');
+        }
+        if (!is_int($column) || $column < 1) {
+            throw new \InvalidArgumentException('column must be positive integer');
+        }
+        if (!Register::checkName($name)) {
+            throw new \InvalidArgumentException('incorrect name');
+        }
+        if (!isset($this->registers[$name])) {
+            throw new \InvalidArgumentException('register '.$name.' not added');
+        }
         $this->networks[] = array(
             'network' => $network,
             'map' => array(
@@ -281,20 +298,14 @@ class Wizard
 
         $this->compileNetwork();
 
-        //$this->compileHeader();
+        $this->compileHeader();
 
-        //$this->makeFile($filename);
+        $this->makeFile($filename);
 
         $this->pdo = null;
 
         unlink($tmpDb);
 
-        print_r([
-            'meta' => $this->meta,
-            //'net' => $this->networks,
-            //'reg' => $this->registers,
-            //'rel' => $this->relations,
-        ]);
     }
 
     /**
@@ -322,9 +333,9 @@ class Wizard
                 if (strlen($child) > $maxLenChild) $maxLenChild = strlen($child);
                 $this->meta['relations']['items'] ++;
                 $this->meta['relations']['data'][] = array(
-                    $parent,
-                    $field,
-                    $child
+                    'p' => $parent,
+                    'f' => $field,
+                    'c' => $child
                 );
             }
         }
@@ -434,7 +445,7 @@ class Wizard
                     $constraints[] = $line;
                 }
             }
-            $sql = 'CREATE TABLE `' . $table . '` (' . implode(', ', $fields) . ', '.implode(', ', $constraints).');'.PHP_EOL;
+            $sql = 'CREATE TABLE `'.$table.'` ('.implode(', ', $fields).', '.implode(', ', $constraints).');'.PHP_EOL;
             foreach ($index as $i) {
                 $sql .= 'CREATE INDEX '.$i.' ON `'.$table.'` ('.$i.');'.PHP_EOL;
             }
@@ -454,9 +465,16 @@ class Wizard
         $source = $register->getCsv();
 
         $columns = $register->getFields();
+        /**
+         * @var FieldAbstract[]
+         */
+        $validators = array();
+
         $fields = array('`_pk`');
         $params = array(':_pk');
         foreach ($columns as $field=>$data) {
+            $validatorClassName = __NAMESPACE__.'\\Field\\'.mb_convert_case($data['type'], \MB_CASE_TITLE).'Field';
+            $validators[$field] = new $validatorClassName($field, $data);
             $fields[] = '`' . $field . '`';
             $fields[] = '`_len_' . $field . '`';
             $params[] = ':' . $field;
@@ -487,7 +505,7 @@ class Wizard
             foreach ($columns as $field=>$data) {
                 $column = $data['column']-1;
                 $value = isset($row[$column])?$row[$column]:null;
-                //TODO $value = $this->fields[$table][$field]->getValidValue($value);
+                $value = $validators[$field]->validValue($value);
                 $values[':'.$field] = $value;
                 $values[':_len_'.$field] = strlen($value);
             };
@@ -528,7 +546,8 @@ class Wizard
         }
         $this->pdo->beginTransaction();
         $transactionIterator = 0;
-        $insert = $this->pdo->prepare('INSERT INTO `_ips` (`ip`,`action`,`parameter`,`value`) VALUES (:ip,:action,:parameter,:value);');
+        $sql = 'INSERT INTO `_ips` (`ip`,`action`,`parameter`,`value`) VALUES (:ip,:action,:parameter,:value);';
+        $insert = $this->pdo->prepare($sql);
         while ($row = fgetcsv($csv, 4096, $source['delimiter'], $source['enclosure'], $source['escape'])) {
             $firstIpColumn = $network->getFistIpColumn()-1;
             $lastIpColumn = $network->getLastIpColumn()-1;
@@ -613,7 +632,7 @@ class Wizard
                     $sql = 'SELECT COUNT(*) AS `max`, "0" AS `min` FROM `' . $this->relations[$table][$field] . '`;';
                     $res = $this->pdo->query($sql);
                     $row = $res->fetch();
-                    $format[$field] = Pack::getOptimalFormat($row['min'], $row['max'], $field);
+                    $format[$field] = Pack::getOptimalFormat(0, $row['max'], $field);
                 } else {
                     switch ($type) {
                         case 'latitude':
@@ -722,7 +741,6 @@ class Wizard
             ':value' => NULL,
         ));
         $ip = -1;
-        $this->meta['networks']['pack'] = '';
         $fields = $this->meta['networks']['fields'];
         $values = array();
         $format = array();
@@ -730,12 +748,12 @@ class Wizard
             $values[$register] = array();
             $format[$register] = Pack::getOptimalFormat(0, $this->meta['registers'][$register]['items'], $register);
         }
+
+
         $this->meta['networks']['format'] = implode('/', $format);
 
         $pack = $this->meta['networks']['format'];
-        /*
-        $this->meta['networks']['unpack'] = mb_substr($this->meta['networks']['unpack'],0,-1);
-        $binaryPrevData = self::packArray($pack, $fields);
+        $binaryPrevData = Pack::pack($pack, $fields);
         $this->meta['networks']['len'] += strlen($binaryPrevData);
         $offset = 0;
         $this->meta['index'][0] = 0;
@@ -746,7 +764,7 @@ class Wizard
                 foreach ($values as $param=>$v) {
                     if (!empty($param)) $fields[$param] = array_pop($v);
                 }
-                $binaryData = self::packArray($pack, $fields);
+                $binaryData = Pack::pack($pack, $fields);
                 if ($binaryData !== $binaryPrevData || empty($ip)) {
                     fwrite($file, pack('N', $ip) . $binaryData);
                     $octet = (int)long2ip($ip);
@@ -769,7 +787,7 @@ class Wizard
             foreach ($values as $param => $v) {
                 if (!empty($param)) $fields[$param] = array_pop($v);
             }
-            $binaryData = self::packArray($pack, $fields);
+            $binaryData = Pack::pack($pack, $fields);
             if ($binaryData !== $binaryPrevData) {
                 $octet = (int)long2ip($ip);
                 if (!isset($this->meta['index'][$octet])) $this->meta['index'][$octet] = $offset;
@@ -784,6 +802,187 @@ class Wizard
         ksort($this->meta['index']);
         fclose($file);
         unset($ip);
-        */
+    }
+
+    /**
+     * Compile header.
+     *
+     * @void
+     */
+    protected function compileHeader()
+    {
+        /*
+         * Ipstack format version.
+         */
+        $header = pack('C', self::FORMAT_VERSION);
+
+        /*
+         * Registers count.
+         */
+        $header .= pack('C', count($this->meta['registers']));
+
+
+        $rnmLen = 1;
+        $pckLen = strlen($this->meta['networks']['format']);
+        $lenMax = $this->meta['networks']['len'];
+        $itmMax = $this->meta['networks']['items'];
+        foreach ($this->meta['registers'] as $registerName => $register) {
+            if (strlen($registerName) > $rnmLen) $rnmLen = strlen($registerName);
+            if (strlen($register['format']) > $pckLen) $pckLen = strlen($register['format']);
+            if ($register['len'] > $lenMax) $lenMax = $register['len'];
+            if ($register['items'] > $itmMax) $itmMax = $register['items'];
+        }
+        $rnm = 'A'.$rnmLen.'name';
+        $pck = 'A'.$pckLen.'format';
+        $len = Pack::getOptimalFormat(0, $lenMax, 'len');
+        $itm = Pack::getOptimalFormat(0, $itmMax, 'items');
+        $format = $rnm.'/'.$pck.'/'.$len.'/'.$itm;
+
+        /*
+         * Size of registers definition unpack format.
+         */
+        $header .= pack('S',strlen($format));
+
+        /*
+         * Size of registers definition row.
+         */
+        $empty = array(
+            'name' => '',
+            'format' => '',
+            'len' => 0,
+            'items' => 0,
+        );
+        $header .= pack('S',strlen(Pack::pack($format, $empty)));
+
+        /*
+         * Relations count.
+         */
+        $header .= pack('C', $this->meta['relations']['items']);
+
+        /*
+         * Size of relations definition unpack format.
+         */
+        $lenRelationsFormat = strlen($this->meta['relations']['format']);
+        $header .= pack('C', $lenRelationsFormat);
+
+        /*
+         * Size of relation definition row.
+         */
+        $header .= pack('S', $this->meta['relations']['len']);
+
+        /*
+         * Relation unpack format (parent, column, child).
+         */
+        $header .= $this->meta['relations']['format'];
+
+        /*
+         * Registers metadata unpack format.
+         */
+        $header .= pack('A*', $format);
+
+        /*
+         * Relations.
+         */
+        if (!empty($this->meta['relations']['data'])) {
+            foreach ($this->meta['relations']['data'] as $relation) {
+                $header .= Pack::pack(
+                    $this->meta['relations']['format'],
+                    $relation
+                );
+            }
+        }
+
+        /**
+         * Registers metadata.
+         */
+        foreach ($this->meta['registers'] as $registerName => $register) {
+            $header .= Pack::pack(
+                $format,
+                array(
+                    'name' => $registerName,
+                    'format' => $register['format'],
+                    'len' => $register['len'],
+                    'items' => $register['items']
+                )
+            );
+        }
+
+        /*
+         * Networks metadata.
+         */
+        $header .= Pack::pack(
+            $format,
+            array(
+                'name' => 'n',
+                'format' => $this->meta['networks']['format'],
+                'len' => $this->meta['networks']['len'],
+                'items' => $this->meta['networks']['items']
+            )
+        );
+
+        /*
+         * Index of first octets.
+         */
+        $packParams = array_values($this->meta['index']);
+        array_unshift($packParams, 'I*');
+        $header .= call_user_func_array('pack',$packParams);
+
+        /*
+         * Control word and header size.
+         */
+        $headerLength = strlen($header);
+        $header = 'ISD'.pack('S', $headerLength).$header;
+
+        $file = fopen($this->prefix.'.header', 'w');
+        fwrite($file, $header);
+        fclose($file);
+    }
+
+    /**
+     * Make file.
+     *
+     * @param string $fileName
+     * @void
+     */
+    protected function makeFile($fileName)
+    {
+        /*
+         * Create binary database.
+         */
+        $tmp = $this->prefix.'.database.dat';
+        $database = fopen($tmp,'w');
+
+        /*
+         * Write header to database.
+         */
+        $file = $this->prefix.'.header';
+        $stream = fopen($file, 'rb');
+        stream_copy_to_stream($stream, $database);
+        fclose($stream);
+        if (is_writable($file)) unlink($file);
+
+        /*
+         * Write networks to database.
+         */
+        $file = $this->prefix.'.networks.dat';
+        $stream = fopen($file, 'rb');
+        stream_copy_to_stream($stream, $database);
+        fclose($stream);
+        if (is_writable($file)) unlink($file);
+
+        foreach ($this->meta['registers'] as $register=>$data) {
+            $file = $this->prefix.'.reg.'.$register.'.dat';
+            $stream = fopen($file, 'rb');
+            stream_copy_to_stream($stream, $database);
+            fclose($stream);
+            if (is_writable($file)) unlink($file);
+        }
+
+        $time = empty($this->time)?time():$this->time;
+        fwrite($database,pack('I1A128',$time,$this->author));
+        fwrite($database,pack('A*',$this->license));
+        fclose($database);
+
+        rename($tmp, $fileName);
     }
 }

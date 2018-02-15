@@ -1,14 +1,12 @@
 <?php
 namespace Ipstack\Test\Functional;
 
+use Ddrv\Extra\Pack;
+use Ipstack\Wizard\Field\StringField;
 use PHPUnit\Framework\TestCase;
 use Ipstack\Wizard\Wizard;
-use Ipstack\Wizard\Sheet\Register;
-use Ipstack\Wizard\Sheet\Network;
-use Ipstack\Wizard\Sheet\Field\StringField;
-use Ipstack\Wizard\Sheet\Field\NumericField;
-use Ipstack\Wizard\Sheet\Field\LatitudeField;
-use Ipstack\Wizard\Sheet\Field\LongitudeField;
+use Ipstack\Wizard\Entity\Register;
+use Ipstack\Wizard\Entity\Network;
 
 /**
  * @covers Finder
@@ -38,9 +36,9 @@ class DatabaseTest extends TestCase
             ->setCsv('UTF-8')
             ->setFirstRow(2)
             ->setId(1)
-            //->addField('name', 2, new StringField())
             ->addStringField('name', 2)
         ;
+
         $network = (new Network($csvDir.DIRECTORY_SEPARATOR.'networks.csv', Network::IP_TYPE_ADDRESS, 1, 2))
             ->setCsv('UTF-8')
             ->setFirstRow(2)
@@ -50,17 +48,10 @@ class DatabaseTest extends TestCase
             ->setAuthor($author)
             ->setTime($time)
             ->setLicense($license)
-            ->addField($network, 3, 'interval', $intervals)
-            //->addRegister('interval', $intervals)
-            /*
-            ->addNetwork(
-                $network,
-                array(
-                    3 => 'interval',
-                )
-            )
-            */
+            ->addRegister('interval', $intervals)
+            ->addField($network, 3, 'interval')
         ;
+
         $wizard->compile($dbFile);
 
         $db = $this->parseFile($dbFile);
@@ -68,10 +59,10 @@ class DatabaseTest extends TestCase
         $this->assertSame('ISD', $db['header']['control']);
         $this->assertSame(1, $db['header']['RGC']);
         $this->assertSame(0, $db['header']['RLC']);
-        $this->assertSame('A10name', $db['meta']['registers']['interval']['pack']);
+        $this->assertSame('A10name', $db['meta']['registers']['interval']['format']);
         $this->assertSame(10, $db['meta']['registers']['interval']['len']);
         $this->assertSame(4, $db['meta']['registers']['interval']['items']);
-        $this->assertSame('Cinterval', $db['meta']['networks']['pack']);
+        $this->assertSame('Cinterval', $db['meta']['networks']['format']);
         $this->assertSame(5, $db['meta']['networks']['len']);
         $this->assertSame(4, $db['meta']['networks']['items']);
         $this->assertSame(0, $db['index'][0]);
@@ -120,17 +111,17 @@ class DatabaseTest extends TestCase
             ->setCsv('UTF-8')
             ->setFirstRow(2)
             ->setId(1)
-            ->addField('code', 2, new StringField(StringField::TRANSFORM_LOWER, 2))
-            ->addField('name', 3, new StringField())
+            ->addStringField('code', 2, StringField::TRANSFORM_LOWER, 2)
+            ->addStringField('name', 3)
         ;
         $cities = (new Register($csvDir.DIRECTORY_SEPARATOR.'cities.csv'))
             ->setCsv('UTF-8')
             ->setFirstRow(2)
             ->setId(1)
-            ->addField('name', 2, new StringField(0))
-            ->addField('countryId', 3, new NumericField(0))
-            ->addField('latitude', 4, new LatitudeField())
-            ->addField('longitude', 5, new LongitudeField())
+            ->addStringField('name', 2)
+            ->addNumericField('countryId', 3)
+            ->addLatitudeField('latitude', 4)
+            ->addLongitudeField('longitude', 5)
         ;
         $network = (new Network($csvDir.DIRECTORY_SEPARATOR.'networks.csv', Network::IP_TYPE_ADDRESS, 1, 2))
             ->setCsv('UTF-8')
@@ -144,32 +135,27 @@ class DatabaseTest extends TestCase
             ->addRegister('city', $cities)
             ->addRegister('country', $countries)
             ->addRelation('city', 'countryId', 'country')
-            ->addNetwork(
-                $network,
-                array(
-                    3 => 'city',
-                )
-            )
+            ->addField($network, 3, 'city')
         ;
         $wizard->compile($dbFile);
 
         $db = $this->parseFile($dbFile);
 
         $this->assertSame('ISD', $db['header']['control']);
-        $this->assertSame('A2code/A10name', $db['meta']['registers']['country']['pack']);
+        $this->assertSame('A2code/A10name', $db['meta']['registers']['country']['format']);
         $this->assertSame(12, $db['meta']['registers']['country']['len']);
         $this->assertSame(3, $db['meta']['registers']['country']['items']);
-        $this->assertSame('A15name/CcountryId/flatitude/flongitude', $db['meta']['registers']['city']['pack']);
-        $this->assertSame(24, $db['meta']['registers']['city']['len']);
+        $this->assertSame('A15name/CcountryId/clatitude:95/clongitude:141', $db['meta']['registers']['city']['format']);
+        $this->assertSame(18, $db['meta']['registers']['city']['len']);
         $this->assertSame(5, $db['meta']['registers']['city']['items']);
-        $this->assertSame('Ccity', $db['meta']['networks']['pack']);
+        $this->assertSame('Ccity', $db['meta']['networks']['format']);
         $this->assertSame(5, $db['meta']['networks']['len']);
         $this->assertSame(7, $db['meta']['networks']['items']);
         $this->assertSame('city', $db['relations'][0]['p']);
         $this->assertSame('countryId', $db['relations'][0]['f']);
         $this->assertSame('country', $db['relations'][0]['c']);
         $this->assertArrayHasKey($db['registers']['city'][2]['countryId'], $db['registers']['country']);
-        $this->assertSame($db['registers']['country'][$db['registers']['city'][2]['countryId']]['code'], 'kz');
+        $this->assertSame('kz', $db['registers']['country'][$db['registers']['city'][2]['countryId']]['code']);
         $this->assertSame($time, $db['time']);
         $this->assertSame($author, $db['author']);
         $this->assertSame($license, $db['license']);
@@ -206,15 +192,15 @@ class DatabaseTest extends TestCase
             ->setCsv('UTF-8')
             ->setFirstRow(2)
             ->setId(1)
-            ->addField('name', 2, new StringField())
-            ->addField('capitalId', 3, new NumericField())
+            ->addStringField('name', 2)
+            ->addNumericField('capitalId', 3)
         ;
         $cities = (new Register($csvDir.DIRECTORY_SEPARATOR.'cities.csv'))
             ->setCsv('UTF-8')
             ->setFirstRow(2)
             ->setId(1)
-            ->addField('name', 2, new StringField(0))
-            ->addField('countryId', 3, new NumericField(0))
+            ->addStringField('name', 2)
+            ->addNumericField('countryId', 3)
         ;
         $network = (new Network($csvDir.DIRECTORY_SEPARATOR.'networks.csv', Network::IP_TYPE_ADDRESS, 1, 2))
             ->setCsv('UTF-8')
@@ -227,14 +213,9 @@ class DatabaseTest extends TestCase
             ->setLicense($license)
             ->addRegister('city', $cities)
             ->addRegister('country', $countries)
+            ->addField($network, 3, 'city')
             ->addRelation('city', 'countryId', 'country')
             ->addRelation('country', 'capitalId', 'city')
-            ->addNetwork(
-                $network,
-                array(
-                    3 => 'city',
-                )
-            )
         ;
         try {
             $wizard->compile($dbFile);
@@ -246,8 +227,6 @@ class DatabaseTest extends TestCase
             rmdir($tmpDir);
             throw $e;
         }
-
-
     }
 
     protected function parseFile($dbFile)
@@ -277,28 +256,28 @@ class DatabaseTest extends TestCase
             'license' => '',
         );
         $db = fopen($dbFile,'rb');
-        $meta = unpack('A3control/Ssize', fread($db, 5));
+        $meta = Pack::unpack('A3control/Ssize', fread($db, 5));
         $result['header']['size'] = $meta['size'];
         $result['header']['control'] = $meta['control'];
         $header = fread($db, $result['header']['size']);
         $offset = 0;
-        $meta = unpack('Cversion/CRGC/SRGF/SRGD/CRLC/CRLF/SRLD', substr($header,$offset,10));
+        $meta = Pack::unpack('Cversion/CRGC/SRGF/SRGD/CRLC/CRLF/SRLD', substr($header,$offset,10));
         $result['header'] = array_replace($result['header'], $meta);
         $offset += 10;
         $unpack = 'A'.$meta['RLF'].'RLUF/A'.$meta['RGF'].'RGMUF';
         $size = $meta['RLF']+$meta['RGF'];
-        $meta = unpack($unpack, substr($header, $offset, $size));
+        $meta = Pack::unpack($unpack, substr($header, $offset, $size));
         $result['header'] = array_replace($result['header'], $meta);
         $offset += $size;
         for ($i=0;$i<$result['header']['RLC'];$i++) {
-            $result['relations'][] = unpack(
+            $result['relations'][] = Pack::unpack(
                 $result['header']['RLUF'],
                 substr($header, $offset, $result['header']['RLD'])
             );
             $offset += $result['header']['RLD'];
         }
         for ($i=0;$i<$result['header']['RGC'];$i++) {
-            $meta = unpack(
+            $meta = Pack::unpack(
                 $result['header']['RGMUF'],
                 substr($header, $offset, $result['header']['RGD'])
             );
@@ -307,7 +286,7 @@ class DatabaseTest extends TestCase
             $result['meta']['registers'][$id] = $meta;
             $offset += $result['header']['RGD'];
         }
-        $meta = unpack(
+        $meta = Pack::unpack(
             $result['header']['RGMUF'],
             substr($header, $offset, $result['header']['RGD'])
         );
@@ -317,24 +296,24 @@ class DatabaseTest extends TestCase
         $result['index'] = array_values(unpack('I*',substr($header, $offset)));
 
         for ($i=0;$i<$result['meta']['networks']['items'];$i++) {
-            $data = unpack(
-                'N:ip/'.$result['meta']['networks']['pack'],
+            $data = Pack::unpack(
+                'N_ip/'.$result['meta']['networks']['format'],
                 fread($db, $result['meta']['networks']['len'])
             );
-            $data[':ip'] = long2ip($data[':ip']);
+            $data['_ip'] = long2ip($data['_ip']);
             $result['networks'][] = $data;
         }
 
         foreach ($result['meta']['registers'] as $register=>$data) {
             for ($id=0;$id<=$data['items'];$id++) {
-                $result['registers'][$register][$id] = unpack(
-                    $data['pack'],
+                $result['registers'][$register][$id] = Pack::unpack(
+                    $data['format'],
                     fread($db, $data['len'])
                 );
             }
         }
 
-        $meta = unpack('Itime/A128author/A*license', fread($db, filesize($dbFile)));
+        $meta = Pack::unpack('Itime/A128author/A*license', fread($db, filesize($dbFile)));
         $result = array_replace($result, $meta);
         fclose($db);
         return $result;
