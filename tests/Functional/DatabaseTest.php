@@ -38,7 +38,8 @@ class DatabaseTest extends TestCase
             ->setCsv('UTF-8')
             ->setFirstRow(2)
             ->setId(1)
-            ->addField('name', 2, new StringField())
+            //->addField('name', 2, new StringField())
+            ->addStringField('name', 2)
         ;
         $network = (new Network($csvDir.DIRECTORY_SEPARATOR.'networks.csv', Network::IP_TYPE_ADDRESS, 1, 2))
             ->setCsv('UTF-8')
@@ -49,13 +50,16 @@ class DatabaseTest extends TestCase
             ->setAuthor($author)
             ->setTime($time)
             ->setLicense($license)
-            ->addRegister('interval', $intervals)
+            ->addField($network, 3, 'interval', $intervals)
+            //->addRegister('interval', $intervals)
+            /*
             ->addNetwork(
                 $network,
                 array(
                     3 => 'interval',
                 )
             )
+            */
         ;
         $wizard->compile($dbFile);
 

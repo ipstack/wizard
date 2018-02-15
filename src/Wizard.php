@@ -2,13 +2,9 @@
 
 namespace Ipstack\Wizard;
 
-use Ipstack\Wizard\Sheet\Field\LatitudeField;
-use Ipstack\Wizard\Sheet\Field\LongitudeField;
-use Ipstack\Wizard\Sheet\Field\NumericField;
-use Ipstack\Wizard\Sheet\Field\StringField;
-use Ipstack\Wizard\Sheet\Network;
-use Ipstack\Wizard\Sheet\Register;
-use Ipstack\Wizard\Sheet\Field\FieldAbstract;
+use Ipstack\Wizard\Entity\Network;
+use Ipstack\Wizard\Entity\Register;
+use Ddrv\Extra\Pack;
 use PDO;
 use PDOStatement;
 use PDOException;
@@ -17,20 +13,17 @@ use PDOException;
  * Class Wizard
  *
  * @const int FORMAT_VERSION
- * @property string $tmpDir
- * @property string $author
- * @property string $license
- * @property int    $time
- * @property array  $networks
- * @property array  $registers
- * @property array  $relations
- * @property PDO    $pdo
- * @property PDOStatement $insertIps
- * @property PDOStatement $insertRegister
- * @property PDOStatement[][] $prepare
- * @property string $prefix
- * @property array $meta
- * @property FieldAbstract[][] $fields
+ * @property string $tmpDir +
+ * @property string $author +
+ * @property string $license +
+ * @property int    $time +
+ * @property array  $networks +
+ * @property Register[]  $registers +
+ * @property array  $relations +
+ * @property PDO    $pdo +
+ * @property string $prefix +
+ * @property array $meta +
+ * @property array $fields
  */
 class Wizard
 {
@@ -65,7 +58,7 @@ class Wizard
     protected $networks = array();
 
     /**
-     * @var array
+     * @var Register[]
      */
     protected $registers = array();
 
@@ -80,19 +73,9 @@ class Wizard
     protected $pdo;
 
     /**
-     * @var PDOStatement
-     */
-    protected $insertIps;
-
-    /**
      * @var string
      */
     protected $prefix;
-
-    /**
-     * @var PDOStatement[]
-     */
-    protected $prepare;
 
     /**
      * @var array $meta
@@ -101,24 +84,17 @@ class Wizard
         'index' => array(),
         'registers' => array(),
         'relations' => array(
-            'pack' => '',
-            'unpack' => '',
+            'format' => '',
             'len' => 3,
             'items' => 0,
         ),
         'networks' => array(
-            'pack' => '',
-            'unpack' => '',
+            'format' => '',
             'len' => 4,
             'items' => 0,
             'fields' => array(),
         ),
     );
-
-    /**
-     * @var array
-     */
-    protected $fields = array();
 
     /**
      * Wizard constructor.
@@ -191,35 +167,21 @@ class Wizard
     }
 
     /**
-     * Add network.
-     *
      * @param Network $network
-     * @param array $map
-     * @return $this
-     * @throws \InvalidArgumentException
-     */
-    public function addNetwork($network, $map)
-    {
-        if (!($network instanceof Network)) {
-            throw new \InvalidArgumentException('incorrect network');
-        }
-        $this->networks[] = array(
-            'network' => $network,
-            'map' => $map,
-        );
-        return $this;
-    }
-
-    /**
-     * Add register.
-     *
+     * @param int $column
      * @param string $name
      * @param Register $register
      * @return $this
      * @throws \InvalidArgumentException
      */
-    public function addRegister($name, $register)
+    public function addField($network, $column, $name, $register)
     {
+        if (!($network instanceof Network)) {
+            throw new \InvalidArgumentException('incorrect network');
+        }
+        if (!is_int($column) || $column < 1) {
+            throw new \InvalidArgumentException('column must be positive integer');
+        }
         if (!Register::checkName($name)) {
             throw new \InvalidArgumentException('incorrect name');
         }
@@ -230,24 +192,13 @@ class Wizard
         if (empty($fields)) {
             throw new \InvalidArgumentException('fields of register can not be empty');
         }
-        foreach ($fields as $field=>$type) {
-            $this->fields[$name][$field] = $type['type'];
-        }
         $this->registers[$name] = $register;
-        return $this;
-    }
-
-    /**
-     * Remove register.
-     *
-     * @param string $name
-     * @return $this
-     */
-    public function removeRegister($name)
-    {
-        if (isset($this->registers[$name])) {
-            unset($this->registers[$name]);
-        }
+        $this->networks[] = array(
+            'network' => $network,
+            'map' => array(
+                $column => $name
+            ),
+        );
         return $this;
     }
 
@@ -276,35 +227,12 @@ class Wizard
     }
 
     /**
-     * Get relations.
-     *
-     * @return array
-     */
-    public function getRelations()
-    {
-        return $this->relations;
-    }
-
-    /**
-     * Remove relation.
-     *
-     * @param string $parent
-     * @param string $column
-     * @return $this
-     */
-    public function removeRelation($parent, $column)
-    {
-        if (isset($this->relations[$parent][$column])) {
-            unset($this->registers[$parent][$column]);
-        }
-        return $this;
-    }
-
-    /**
      * Compile database.
      *
      * @param string $filename
+     * @void
      * @throws \PDOException
+     * @throws \InvalidArgumentException
      * @throws \ErrorException
      */
     public function compile($filename)
@@ -345,7 +273,7 @@ class Wizard
 
         $this->cleanTmpDb();
 
-        $this->updatePackFormat();
+        $this->definePackFormat();
 
         foreach ($this->registers as $table=>$register) {
             $this->compileRegister($table);
@@ -353,18 +281,121 @@ class Wizard
 
         $this->compileNetwork();
 
-        $this->compileHeader();
+        //$this->compileHeader();
 
-        $this->makeFile($filename);
+        //$this->makeFile($filename);
 
         $this->pdo = null;
 
-        //unlink($tmpDb);
+        unlink($tmpDb);
 
+        print_r([
+            'meta' => $this->meta,
+            //'net' => $this->networks,
+            //'reg' => $this->registers,
+            //'rel' => $this->relations,
+        ]);
+    }
+
+    /**
+     * Check for recursive relations.
+     *
+     * @void
+     * @throws \ErrorException
+     */
+    protected function checkRelations()
+    {
+        foreach ($this->relations as $parent=>$relation) {
+            foreach ($relation as $field=>$child) {
+                if (isset($this->relations[$child]) && in_array($parent, $this->relations[$child])) {
+                    throw new \ErrorException('relations can not be recursive');
+                }
+            }
+        }
+        $maxLenParent = 1;
+        $maxLenField = 1;
+        $maxLenChild = 1;
+        foreach ($this->relations as $parent => $networkRelation) {
+            if (strlen($parent) > $maxLenParent) $maxLenParent = strlen($parent);
+            foreach ($networkRelation as $field => $child) {
+                if (strlen($field) > $maxLenField) $maxLenField = strlen($field);
+                if (strlen($child) > $maxLenChild) $maxLenChild = strlen($child);
+                $this->meta['relations']['items'] ++;
+                $this->meta['relations']['data'][] = array(
+                    $parent,
+                    $field,
+                    $child
+                );
+            }
+        }
+
+        $this->meta['relations']['format'] = 'A'.$maxLenParent.'p'
+            .'/A'.$maxLenField.'f'
+            .'/A'.$maxLenChild.'c';
+        $empty = array('p'=>null, 'f'=>null,'c'=>null);
+        $this->meta['relations']['len'] = strlen(Pack::pack($this->meta['relations']['format'], $empty));
+    }
+
+    /**
+     * Sort registers.
+     *
+     * @void
+     */
+    protected function sortRegisters()
+    {
+        $sortedRegisters = array();
+        $deletedRegisters = $registers = array_keys($this->registers);
+        foreach ($this->networks as $network) {
+            foreach ($network['map'] as $register) {
+                $nd = array_search($register, $deletedRegisters);
+                if (false !== $nd) {
+                    unset($deletedRegisters[$nd]);
+                }
+            }
+        }
+        foreach ($registers as $register) {
+            $nd = array_search($register, $deletedRegisters);
+            if (false !== $nd) {
+                unset($deletedRegisters[$nd]);
+            }
+            if (!empty($this->relations[$register])) {
+                foreach ($this->relations[$register] as $child) {
+                    $nd = array_search($child, $deletedRegisters);
+                    if (false !== $nd) {
+                        unset($deletedRegisters[$nd]);
+                    }
+                    $nc = array_search($child, $sortedRegisters);
+                    if (false === $nc) {
+                        array_unshift($sortedRegisters, $child);
+                        unset($registers[$child]);
+                        $nc = 0;
+                    }
+                    $np = array_search($register, $sortedRegisters);
+                    if (false === $np) {
+                        array_splice($sortedRegisters, $nc+1, 0, $register);
+                        unset($registers[$register]);
+                    } elseif ( $np < $nc ) {
+                        array_splice($sortedRegisters, $np+1, 1);
+                        array_splice($sortedRegisters, $nc+1, 0, $register);
+                    }
+                }
+            }
+        }
+        foreach ($sortedRegisters as $register) {
+            if (in_array($register, $deletedRegisters)) {
+                unset($this->registers[$register]);
+            } else {
+                $data = $this->registers[$register];
+                unset($this->registers[$register]);
+                $this->registers[$register] = $data;
+            }
+        }
     }
 
     /**
      * Create tmp sqlite database.
+     *
+     * @void
      */
     protected function createTmpDb()
     {
@@ -382,20 +413,13 @@ class Wizard
             CREATE INDEX `value` ON `_ips` (`value`);
         ';
         $this->pdo->exec($sql);
-        $sql = 'INSERT INTO `_ips` (`ip`,`action`,`parameter`,`value`) VALUES (:ip,:action,:parameter,:value);';
-        $this->insertIps = $this->pdo->prepare($sql);
-        $this->insertIps->execute(array(
-            'ip' => 0,
-            'action' => 'add',
-            'parameter' => NULL,
-            'value' => NULL,
-        ));
+
         foreach ($this->registers as $table=>$register) {
             $columns = $register->getFields();
             $fields = array('`_pk` TEXT', '`_offset` INTEGER');
             $index = array();
             foreach ($columns as $field=>$data) {
-                $fields[] = '`' . $field . '`';// '.$data['type']->getSqliteType();
+                $fields[] = '`' . $field . '`';
                 $fields[] = '`_len_' . $field . '` INTEGER';
                 $index[] = '`_len_' . $field . '`';
             }
@@ -419,9 +443,73 @@ class Wizard
     }
 
     /**
+     * Create temporary register.
+     *
+     * @param Register $register
+     * @param string $table
+     * @void
+     */
+    protected function addRegisterInTmpDb($register, $table)
+    {
+        $source = $register->getCsv();
+
+        $columns = $register->getFields();
+        $fields = array('`_pk`');
+        $params = array(':_pk');
+        foreach ($columns as $field=>$data) {
+            $fields[] = '`' . $field . '`';
+            $fields[] = '`_len_' . $field . '`';
+            $params[] = ':' . $field;
+            $params[] = ':_len_' . $field;
+        }
+        $sql = 'INSERT INTO `'.$table.'` (' . implode(',', $fields) . ') VALUES (' . implode(',', $params) . ');';
+        $insertStatement = $this->pdo->prepare($sql);
+
+        $firstRow = $register->getFirstRow()-1;
+        $csv = fopen($source['file'], 'r');
+        for($ignore=0; $ignore < $firstRow; $ignore++) {
+            $row = fgetcsv($csv, 4096, $source['delimiter'], $source['enclosure'], $source['escape']);
+            unset($row);
+        }
+        $rowIterator = 0;
+        $idColumn = $register->getId()-1;
+        $this->pdo->beginTransaction();
+        $transactionIterator = 0;
+        while ($row = fgetcsv($csv, 4096, $source['delimiter'], $source['enclosure'], $source['escape'])) {
+            $rowIterator++;
+            $rowId = $rowIterator;
+            if ($idColumn >= 0 && isset($row[$idColumn])) {
+                $rowId = $row[$idColumn];
+            }
+            $values = array(
+                '_pk' => $rowId,
+            );
+            foreach ($columns as $field=>$data) {
+                $column = $data['column']-1;
+                $value = isset($row[$column])?$row[$column]:null;
+                //TODO $value = $this->fields[$table][$field]->getValidValue($value);
+                $values[':'.$field] = $value;
+                $values[':_len_'.$field] = strlen($value);
+            };
+
+
+            $insertStatement->execute($values);
+
+            $transactionIterator++;
+            if ($transactionIterator > 100000) {
+                $this->pdo->commit();
+                $this->pdo->beginTransaction();
+                $transactionIterator = 0;
+            }
+        }
+        $this->pdo->commit();
+    }
+
+    /**
      * Create temporary network.
      *
      * @param array $data
+     * @void
      * @throws \ErrorException
      */
     protected function addNetworkInTmpDb($data)
@@ -484,63 +572,80 @@ class Wizard
     }
 
     /**
-     * Create temporary register.
+     * Clean unused data from temporary database.
      *
-     * @param Register $register
-     * @param string $table
+     * @void
      */
-    protected function addRegisterInTmpDb($register, $table)
+    protected function cleanTmpDb()
     {
-        $source = $register->getCsv();
-
-        $columns = $register->getFields();
-        $fields = array('`_pk`');
-        $params = array(':_pk');
-        foreach ($columns as $field=>$data) {
-            $fields[] = '`' . $field . '`';
-            $fields[] = '`_len_' . $field . '`';
-            $params[] = ':' . $field;
-            $params[] = ':_len_' . $field;
-        }
-        $sql = 'INSERT INTO `'.$table.'` (' . implode(',', $fields) . ') VALUES (' . implode(',', $params) . ');';
-        $insertStatement = $this->pdo->prepare($sql);
-
-        $firstRow = $register->getFirstRow()-1;
-        $csv = fopen($source['file'], 'r');
-        for($ignore=0; $ignore < $firstRow; $ignore++) {
-            $row = fgetcsv($csv, 4096, $source['delimiter'], $source['enclosure'], $source['escape']);
-            unset($row);
-        }
-        $rowIterator = 0;
-        $idColumn = $register->getId()-1;
-        $this->pdo->beginTransaction();
-        $transactionIterator = 0;
-        while ($row = fgetcsv($csv, 4096, $source['delimiter'], $source['enclosure'], $source['escape'])) {
-            $rowIterator++;
-            $rowId = $rowIterator;
-            if ($idColumn >= 0 && isset($row[$idColumn])) {
-                $rowId = $row[$idColumn];
-            }
-            $values = array(
-                '_pk' => $rowId,
-            );
-            foreach ($columns as $field=>$data) {
-                $column = $data['column']-1;
-                $value = isset($row[$column])?$row[$column]:null;
-                $value = $this->fields[$table][$field]->getValidValue($value);
-                $values[$field] = $value;
-                $values['_len_'.$field] = strlen($value);
-            };
-
-            $insertStatement->execute($values);
-            $transactionIterator++;
-            if ($transactionIterator > 100000) {
-                $this->pdo->commit();
-                $this->pdo->beginTransaction();
-                $transactionIterator = 0;
+        $registers = array_reverse(array_keys($this->registers));
+        foreach ($registers as $parent) {
+            if (!empty($this->relations[$parent])) {
+                foreach ($this->relations[$parent] as $field => $child) {
+                    $innerSql = 'SELECT `' . $field . '` FROM `' . $parent . '` GROUP BY `' . $field . '`';
+                    $sql = 'DELETE FROM `' . $child . '` WHERE `_pk` NOT IN (' . $innerSql . ');';
+                    $this->pdo->exec($sql);
+                }
             }
         }
-        $this->pdo->commit();
+        foreach ($this->networks as $network) {
+            foreach ($network['map'] as $register) {
+                $innerSql = 'SELECT `_pk` FROM `'.$register.'` GROUP BY `_pk`';
+                $sql = 'DELETE FROM `_ips` WHERE  WHERE `parameter` = "'.$register.'" AND `value` NOT IN ('.$innerSql.');';
+                $this->pdo->exec($sql);
+            }
+        }
+    }
+
+    /**
+     * Define pack format.
+     *
+     * @void
+     */
+    protected function definePackFormat() {
+        foreach ($this->registers as $table=>$register) {
+            $fields = $register->getFields();
+            $format = array();
+            $empty = array();
+            foreach ($fields as $field=>$data) {
+                $type = $data['type'];
+                if (isset($this->relations[$table][$field])) {
+                    $sql = 'SELECT COUNT(*) AS `max`, "0" AS `min` FROM `' . $this->relations[$table][$field] . '`;';
+                    $res = $this->pdo->query($sql);
+                    $row = $res->fetch();
+                    $format[$field] = Pack::getOptimalFormat($row['min'], $row['max'], $field);
+                } else {
+                    switch ($type) {
+                        case 'latitude':
+                            $format[$field] = Pack::getOptimalFormat(-90, 90, $field, 4);
+                            break;
+                        case 'longitude':
+                            $format[$field] = Pack::getOptimalFormat(-180, 180, $field, 4);
+                            break;
+                        case 'string':
+                            $sql = 'SELECT MAX(`_len_' . $field . '`) AS `max`, "0" AS `min` FROM `'.$table.'`;';
+                            $res = $this->pdo->query($sql);
+                            $row = $res->fetch();
+                            $format[$field] = 'A'.$row['max'].$field;
+                            break;
+                        default:
+                            $sql = 'SELECT MAX(`' . $field . '`) AS `max`, MIN(`' . $field . '`) AS `min` FROM `' . $table . '`;';
+                            $res = $this->pdo->query($sql);
+                            $row = $res->fetch();
+                            $format[$field] = Pack::getOptimalFormat($row['min'], $row['max'], $field);
+                            break;
+                    }
+                }
+                $empty[$field] = null;
+            }
+            $pack = implode('/', $format);
+            $bin = Pack::pack($pack, $empty);
+
+            $this->meta['registers'][$table]['format'] = $pack;
+            $this->meta['registers'][$table]['len'] = strlen($bin);
+            $this->meta['registers'][$table]['items'] = 0;
+            $this->meta['registers'][$table]['fields'] = $empty;
+        }
     }
 
     /**
@@ -551,10 +656,10 @@ class Wizard
     protected function compileRegister($register)
     {
         $file = fopen($this->prefix.'.reg.'.$register.'.dat', 'w');
-        $pack = $this->meta['registers'][$register]['pack'];
+        $format = $this->meta['registers'][$register]['format'];
         $empty =  $this->meta['registers'][$register]['fields'];
-        $bin = self::packArray($pack, $empty);
-        fwrite($file,$bin);
+        $bin = Pack::pack($format, $empty);
+        fwrite($file, $bin);
         $offset = 0;
         $select = array(
             '*' => '`'.$register.'`.*',
@@ -575,14 +680,14 @@ class Wizard
             $rowId = $row['_pk'];
             unset($row['_pk']);
             unset($row['_offset']);
-            foreach ($this->fields[$register] as $field=>$type) {
+            foreach ($empty as $field=>$null) {
                 unset($row['_len_'.$field]);
             }
             $check = 0;
             foreach ($row as $cell=>$cellValue) {
                 if (!empty($cellValue)) $check = 1;
             }
-            $bin = self::packArray($pack, $row);
+            $bin = Pack::pack($format, $row);
             if ($check) {
                 $offset ++;
                 fwrite($file,$bin);
@@ -608,19 +713,27 @@ class Wizard
      */
     protected function compileNetwork()
     {
+        $sql = 'INSERT INTO `_ips` (`ip`,`action`,`parameter`,`value`) VALUES (:ip,:action,:parameter,:value);';
+        $insertIps = $this->pdo->prepare($sql);
+        $insertIps->execute(array(
+            ':ip' => 0,
+            ':action' => 'add',
+            ':parameter' => NULL,
+            ':value' => NULL,
+        ));
         $ip = -1;
         $this->meta['networks']['pack'] = '';
         $fields = $this->meta['networks']['fields'];
         $values = array();
+        $format = array();
         foreach ($fields as $register=>$null) {
             $values[$register] = array();
-            $type = new NumericField(0);
-            $type->updatePackFormat($this->meta['registers'][$register]['items']);
-            $pack = $type->getPackFormat();
-            $this->meta['networks']['pack'] .= $pack;
-            $this->meta['networks']['unpack'] .= $pack.$register.'/';
+            $format[$register] = Pack::getOptimalFormat(0, $this->meta['registers'][$register]['items'], $register);
         }
-        $pack = $this->meta['networks']['pack'];
+        $this->meta['networks']['format'] = implode('/', $format);
+
+        $pack = $this->meta['networks']['format'];
+        /*
         $this->meta['networks']['unpack'] = mb_substr($this->meta['networks']['unpack'],0,-1);
         $binaryPrevData = self::packArray($pack, $fields);
         $this->meta['networks']['len'] += strlen($binaryPrevData);
@@ -671,355 +784,6 @@ class Wizard
         ksort($this->meta['index']);
         fclose($file);
         unset($ip);
-    }
-
-    /**
-     * Check for recursive relations.
-     *
-     * @throws \ErrorException
-     */
-    protected function checkRelations()
-    {
-        foreach ($this->relations as $parent=>$relation) {
-            foreach ($relation as $field=>$child) {
-                if (isset($this->relations[$child]) && in_array($parent, $this->relations[$child])) {
-                    throw new \ErrorException('relations can not be recursive');
-                }
-            }
-        }
-        $parentType = new StringField();
-        $fieldType = new StringField();
-        $childType = new StringField();
-        foreach ($this->relations as $parent => $networkRelation) {
-            foreach ($networkRelation as $field => $child) {
-                $parentType->updatePackFormat($parent);
-                $childType->updatePackFormat($child);
-                $fieldType->updatePackFormat($field);
-
-                $this->meta['relations']['items'] ++;
-                $this->meta['relations']['data'][] = array(
-                    $parent,
-                    $field,
-                    $child
-                );
-            }
-        }
-        $this->meta['relations']['pack'] = $parentType->getPackFormat()
-            .$fieldType->getPackFormat()
-            .$childType->getPackFormat();
-        $this->meta['relations']['unpack'] = $parentType->getPackFormat().'p/'
-            .$fieldType->getPackFormat().'f/'
-            .$childType->getPackFormat().'c';
-        $this->meta['relations']['len'] = strlen(pack($this->meta['relations']['pack'], null, null, null));
-    }
-
-    /**
-     * Compile header.
-     */
-    protected function compileHeader()
-    {
-        /*
-         * Ipstack format version.
-         */
-        $header = pack('C', self::FORMAT_VERSION);
-
-        /*
-         * Registers count.
-         */
-        $header .= pack('C', count($this->meta['registers']));
-
-        $rnmType = new StringField();
-        $rnmType->updatePackFormat('n');
-        $pckType = new StringField();;
-        $pckType->updatePackFormat($this->meta['networks']['unpack']);
-        $lenType = new NumericField();
-        $lenType->updatePackFormat($this->meta['networks']['len']);
-        $itmType = new NumericField();
-        $itmType->updatePackFormat($this->meta['networks']['items']);
-        foreach ($this->meta['registers'] as $registerName => $register) {
-            $rnmType->updatePackFormat($registerName);
-            $pckType->updatePackFormat($register['unpack']);
-            $lenType->updatePackFormat($register['len']);
-            $itmType->updatePackFormat($register['items']);
-        }
-        $len = $lenType->getPackFormat();
-        $itm = $itmType->getPackFormat();
-        $pck = $pckType->getPackFormat();
-        $rnm = $rnmType->getPackFormat();
-
-        $pack = $rnm.$pck.$len.$itm;
-        $unpack =$rnm.'name/'.$pck.'pack/'.$len.'len/'.$itm.'items';
-
-        /*
-         * Size of registers definition unpack format.
-         */
-        $header .= pack('S',strlen($unpack));
-
-        /*
-         * Size of registers definition row.
-         */
-        $header .= pack('S',strlen(pack($pack,'','',0,0)));
-
-        /*
-         * Relations count.
-         */
-        $header .= pack('C', $this->meta['relations']['items']);
-
-        /*
-         * Size of relations definition unpack format.
-         */
-        $lenRelationsFormat = strlen($this->meta['relations']['unpack']);
-        $header .= pack('C', $lenRelationsFormat);
-
-        /*
-         * Size of relation definition row.
-         */
-        $header .= pack('S', $this->meta['relations']['len']);
-
-        /*
-         * Relation unpack format (parent, column, child).
-         */
-        $header .= $this->meta['relations']['unpack'];
-
-        /*
-         * Registers metadata unpack format.
-         */
-        $header .= pack('A*',$unpack);
-
-        /*
-         * Relations.
-         */
-        if (!empty($this->meta['relations']['data'])) {
-            foreach ($this->meta['relations']['data'] as $relation) {
-                $header .= self::packArray(
-                    $this->meta['relations']['pack'],
-                    $relation
-                );
-            }
-        }
-
-        /**
-         * Registers metadata.
-         */
-        foreach ($this->meta['registers'] as $registerName => $register) {
-            $header .= pack(
-                $pack,
-                $registerName,
-                $register['unpack'],
-                $register['len'],
-                $register['items']
-            );
-        }
-
-        /*
-         * Networks metadata.
-         */
-        $header .= pack(
-            $pack,
-            'n',
-            $this->meta['networks']['unpack'],
-            $this->meta['networks']['len'],
-            $this->meta['networks']['items']
-        );
-
-        /*
-         * Index of first octets.
-         */
-        $header .= $this->packArray('I*',$this->meta['index']);
-
-        /*
-         * Control word and header size.
-         */
-        $headerLength = strlen($header);
-        $header = 'ISD'.pack('S', $headerLength).$header;
-
-        $file = fopen($this->prefix.'.header', 'w');
-        fwrite($file, $header);
-        fclose($file);
-    }
-
-    /**
-     * Make file.
-     *
-     * @param string $fileName
-     */
-    protected function makeFile($fileName)
-    {
-        /*
-         * Create binary database.
-         */
-        $tmp = $this->prefix.'.database.dat';
-        $database = fopen($tmp,'w');
-
-        /*
-         * Write header to database.
-         */
-        $file = $this->prefix.'.header';
-        $stream = fopen($file, 'rb');
-        stream_copy_to_stream($stream, $database);
-        fclose($stream);
-        if (is_writable($file)) unlink($file);
-
-        /*
-         * Write networks to database.
-         */
-        $file = $this->prefix.'.networks.dat';
-        $stream = fopen($file, 'rb');
-        stream_copy_to_stream($stream, $database);
-        fclose($stream);
-        if (is_writable($file)) unlink($file);
-
-        foreach ($this->meta['registers'] as $register=>$data) {
-            $file = $this->prefix.'.reg.'.$register.'.dat';
-            $stream = fopen($file, 'rb');
-            stream_copy_to_stream($stream, $database);
-            fclose($stream);
-            if (is_writable($file)) unlink($file);
-        }
-
-        $time = empty($this->time)?time():$this->time;
-        fwrite($database,pack('I1A128',$time,$this->author));
-        fwrite($database,pack('A*',$this->license));
-        fclose($database);
-
-        rename($tmp, $fileName);
-    }
-
-    /**
-     * Sort registers.
-     *
-     */
-    protected function sortRegisters()
-    {
-        $sortedRegisters = array();
-        $deletedRegisters = $registers = array_keys($this->registers);
-        foreach ($this->networks as $network) {
-            foreach ($network['map'] as $register) {
-                $nd = array_search($register, $deletedRegisters);
-                if (false !== $nd) {
-                    unset($deletedRegisters[$nd]);
-                }
-            }
-        }
-        foreach ($registers as $register) {
-            $nd = array_search($register, $deletedRegisters);
-            if (false !== $nd) {
-                unset($deletedRegisters[$nd]);
-            }
-            if (!empty($this->relations[$register])) {
-                foreach ($this->relations[$register] as $child) {
-                    $nd = array_search($child, $deletedRegisters);
-                    if (false !== $nd) {
-                        unset($deletedRegisters[$nd]);
-                    }
-                    $nc = array_search($child, $sortedRegisters);
-                    if (false === $nc) {
-                        array_unshift($sortedRegisters, $child);
-                        unset($registers[$child]);
-                        $nc = 0;
-                    }
-                    $np = array_search($register, $sortedRegisters);
-                    if (false === $np) {
-                        array_splice($sortedRegisters, $nc+1, 0, $register);
-                        unset($registers[$register]);
-                    } elseif ( $np < $nc ) {
-                        array_splice($sortedRegisters, $np+1, 1);
-                        array_splice($sortedRegisters, $nc+1, 0, $register);
-                    }
-                }
-            }
-        }
-        foreach ($sortedRegisters as $register) {
-            if (in_array($register, $deletedRegisters)) {
-                unset($this->registers[$register]);
-            } else {
-                $data = $this->registers[$register];
-                unset($this->registers[$register]);
-                $this->registers[$register] = $data;
-            }
-        }
-    }
-
-    protected function cleanTmpDb()
-    {
-        $registers = array_reverse(array_keys($this->registers));
-        foreach ($registers as $parent) {
-            if (!empty($this->relations[$parent])) {
-                foreach ($this->relations[$parent] as $field => $child) {
-                    $innerSql = 'SELECT `' . $field . '` FROM `' . $parent . '` GROUP BY `' . $field . '`';
-                    $sql = 'DELETE FROM `' . $child . '` WHERE `_pk` NOT IN (' . $innerSql . ');';
-                    $this->pdo->exec($sql);
-                }
-            }
-        }
-        foreach ($this->networks as $network) {
-            foreach ($network['map'] as $register) {
-                $innerSql = 'SELECT `_pk` FROM `'.$register.'` GROUP BY `_pk`';
-                $sql = 'DELETE FROM `_ips` WHERE  WHERE `parameter` = "'.$register.'" AND `value` NOT IN ('.$innerSql.');';
-                $this->pdo->exec($sql);
-            }
-        }
-    }
-
-    protected function updatePackFormat() {
-        foreach ($this->fields as $table=>$fields) {
-            $format = array();
-            $empty = array();
-            foreach ($fields as $field=>$type) {
-                $row = array(
-                    'max' => null,
-                );
-                if (isset($this->relations[$table][$field])) {
-                    $this->fields[$table][$field] = new NumericField(0);
-                    $sql = 'SELECT COUNT(*) AS `max` FROM `' . $this->relations[$table][$field] . '`;';
-                    $res = $this->pdo->query($sql);
-                    $row = $res->fetch();
-                } else {
-                    switch (get_class($this->fields[$table][$field])) {
-                        case LatitudeField::class:
-                            break;
-                        case LongitudeField::class:
-                            break;
-                        case StringField::class:
-                            $sql = 'SELECT MAX(`_len_' . $field . '`) AS `max` FROM `'.$table.'`;';
-                            $res = $this->pdo->query($sql);
-                            $r = $res->fetch();
-                            $row['max'] = pack('A'.$r['max'], '1');
-                            break;
-                        default:
-                            $sql = 'SELECT MAX(`' . $field . '`) AS `max` FROM `' . $table . '`;';
-                            $res = $this->pdo->query($sql);
-                            $row = $res->fetch();
-                            break;
-                    }
-                }
-                $this->fields[$table][$field]->updatePackFormat($row['max']);
-                $fieldPackFormat = $this->fields[$table][$field]->getPackFormat();
-                $format['pack'][] = $fieldPackFormat;
-                $format['unpack'][] = $fieldPackFormat.$field;
-                $empty[$field] = null;
-            }
-            $pack = implode('', $format['pack']);
-            $bin = self::packArray($pack,$empty);
-            $this->meta['registers'][$table]['pack'] = $pack;
-            $this->meta['registers'][$table]['unpack'] = implode('/',$format['unpack']);
-            $this->meta['registers'][$table]['len'] = strlen($bin);
-            $this->meta['registers'][$table]['items'] = 0;
-            $this->meta['registers'][$table]['fields'] = $empty;
-        }
-    }
-
-    /**
-     * Function-helper for pack arrays
-     *
-     * @param string $format
-     * @param array $array
-     * @return string
-     */
-    public static function packArray($format,$array)
-    {
-        $packParams = array_values($array);
-        array_unshift($packParams,$format);
-        return call_user_func_array('pack',$packParams);
+        */
     }
 }

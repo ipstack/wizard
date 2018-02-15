@@ -13,7 +13,7 @@ require_once ($srcDir.'Sheet'.DIRECTORY_SEPARATOR.'Field'.DIRECTORY_SEPARATOR.'L
 require_once ($srcDir.'Sheet'.DIRECTORY_SEPARATOR.'SheetAbstract.php');
 require_once ($srcDir.'Sheet'.DIRECTORY_SEPARATOR.'Register.php');
 require_once ($srcDir.'Sheet'.DIRECTORY_SEPARATOR.'Network.php');
-require_once ($srcDir.'Wizard.php');
+require_once($srcDir . 'Wizard.php');
 
 /*
  * fix for using PHPUnit as composer package and PEAR extension
