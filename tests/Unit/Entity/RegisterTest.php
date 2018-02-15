@@ -406,7 +406,5 @@ class RegisterTest extends TestCase
         }
         $this->assertSame(1, $array['dec1']['precision']);
         $this->assertSame(1, $array['dec2']['precision']);
-        $this->assertArrayNotHasKey('precision', $array['int1']);
-        $this->assertArrayNotHasKey('precision', $array['int2']);
     }
 }

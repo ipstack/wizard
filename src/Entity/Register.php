@@ -67,14 +67,14 @@ class Register extends EntityAbstract
      * @param string $name
      * @param int $column
      * @param int $transform
-     * @param int $maxLength
+     * @param int|string $maxLength
      * @return $this
      * @throws \InvalidArgumentException
      */
     public function addStringField($name, $column, $transform=0, $maxLength=0)
     {
-        if (!is_int($maxLength) || $maxLength < 0) {
-            throw new \InvalidArgumentException('maxLength must be positive integer or 0');
+        if ((!is_int($maxLength) && $maxLength != '~') || $maxLength < 0) {
+            throw new \InvalidArgumentException('maxLength must be positive integer, 0 or ~');
         }
         switch ($transform) {
             case StringField::TRANSFORM_NONE:
@@ -172,7 +172,7 @@ class Register extends EntityAbstract
         if (!is_int($column) || $column < 1) {
             throw new \InvalidArgumentException('column must be positive integer');
         }
-        $regexp = '/^(?<type>(st|n|f|lat|lon))(?<number>\d+)?/ui';
+        $regexp = '/^(?<type>(st|n|f|lat|lon))(?<number>(\d+|\~))?/ui';
         preg_match($regexp, $type, $math);
         if (empty($math['type'])) {
             throw new \InvalidArgumentException('incorrect type');
@@ -224,7 +224,9 @@ class Register extends EntityAbstract
             default:
                 break;
         }
-        if ($number && $numberKey) $data[$numberKey] = (int)$number;
+        if ($numberKey) {
+            $data[$numberKey] = ($number == '~')?$number:(int)$number;
+        }
         $this->fields[$name] = $data;
         return $this;
     }

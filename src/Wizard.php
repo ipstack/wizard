@@ -637,6 +637,9 @@ class Wizard
                             $res = $this->pdo->query($sql);
                             $row = $res->fetch();
                             $format[$field] = 'A'.$row['max'].$field;
+                            if (array_key_exists('maxLength', $data) && $data['maxLength'] === '~') {
+                                $format[$field] = '~'.$field;
+                            }
                             break;
                         default:
                             $fieldClassName = __NAMESPACE__.'\\Field\\'.mb_convert_case($data['type'], \MB_CASE_TITLE).'Field';

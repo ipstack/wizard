@@ -42,6 +42,23 @@ class StringField extends FieldAbstract
     );
 
     /**
+     * StringField constructor.
+     *
+     * @param string $key
+     * @param array $settings
+     */
+    public function __construct($key, $settings=array())
+    {
+        parent::__construct($key, $settings);
+        if ($this->settings['maxLength'] == '~') {
+            $this->format['character'] = '~';
+            $this->format['number'] = null;
+        }
+        $this->format['key'] = $key;
+        $this->settings = array_replace($this->settings, $settings);
+    }
+
+    /**
      * Get valid value.
      *
      * @param $value
@@ -49,7 +66,11 @@ class StringField extends FieldAbstract
      */
     public function validValue($value=null)
     {
-        if (!empty($this->settings['maxLength']) && strlen($value) > $this->settings['maxLength']) {
+        if (
+            !empty($this->settings['maxLength'])
+            && $this->settings['maxLength'] != '~'
+            && strlen($value) > $this->settings['maxLength']
+        ) {
             $value = substr($value, 0, $this->settings['maxLength']);
         }
         if ($this->settings['transform'] !== self::TRANSFORM_NONE) {
@@ -75,7 +96,10 @@ class StringField extends FieldAbstract
      */
     public function update($value=null)
     {
-        if ($this->format['number'] < strlen($value)) {
+        if (
+            $this->settings['maxLength'] != '~'
+            && $this->format['number'] < strlen($value)
+        ) {
             $this->format['number'] = strlen($value);
         }
         return true;
