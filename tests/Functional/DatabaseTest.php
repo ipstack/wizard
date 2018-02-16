@@ -60,11 +60,11 @@ class DatabaseTest extends TestCase
         $this->assertSame(1, $db['header']['RGC']);
         $this->assertSame(0, $db['header']['RLC']);
         $this->assertSame('A10name', $db['meta']['registers']['interval']['format']);
-        $this->assertSame(20, $db['meta']['registers']['interval']['s']);
-        $this->assertSame(50, $db['meta']['registers']['interval']['n']);
+        $this->assertSame(10, $db['meta']['registers']['interval']['len']);
+        $this->assertSame(4, $db['meta']['registers']['interval']['items']);
         $this->assertSame('Cinterval', $db['meta']['networks']['format']);
-        $this->assertSame(5, $db['meta']['networks']['s']);
-        $this->assertSame(4, $db['meta']['networks']['n']);
+        $this->assertSame(5, $db['meta']['networks']['len']);
+        $this->assertSame(4, $db['meta']['networks']['items']);
         $this->assertSame(0, $db['index'][0]);
         $this->assertSame(0, $db['index'][63]);
         $this->assertSame(1, $db['index'][64]);
@@ -142,18 +142,20 @@ class DatabaseTest extends TestCase
         $db = $this->parseFile($dbFile);
 
         $this->assertSame('ISD', $db['header']['control']);
-        $this->assertSame('A2code/~name', $db['meta']['registers']['country']['format']);
-        $this->assertSame(35, $db['meta']['registers']['country']['s']);
-        $this->assertSame(38, $db['meta']['registers']['country']['n']);
-        $this->assertSame('~name/CcountryId/r4latitude:8049909/R4longitude', $db['meta']['registers']['city']['format']);
-        $this->assertSame(73, $db['meta']['registers']['city']['s']);
-        $this->assertSame(87, $db['meta']['registers']['city']['n']);
+        $this->assertSame('A2code/A10name', $db['meta']['registers']['country']['format']);
+        $this->assertSame(12, $db['meta']['registers']['country']['len']);
+        $this->assertSame(3, $db['meta']['registers']['country']['items']);
+        $this->assertSame('A15name/CcountryId/r4latitude:8049909/R4longitude', $db['meta']['registers']['city']['format']);
+        $this->assertSame(22, $db['meta']['registers']['city']['len']);
+        $this->assertSame(5, $db['meta']['registers']['city']['items']);
         $this->assertSame('Ccity', $db['meta']['networks']['format']);
-        $this->assertSame(5, $db['meta']['networks']['s']);
-        $this->assertSame(7, $db['meta']['networks']['n']);
+        $this->assertSame(5, $db['meta']['networks']['len']);
+        $this->assertSame(7, $db['meta']['networks']['items']);
         $this->assertSame('city', $db['relations'][0]['p']);
         $this->assertSame('countryId', $db['relations'][0]['f']);
         $this->assertSame('country', $db['relations'][0]['c']);
+        $this->assertArrayHasKey($db['registers']['city'][2]['countryId'], $db['registers']['country']);
+        $this->assertSame('kz', $db['registers']['country'][$db['registers']['city'][2]['countryId']]['code']);
         $this->assertSame($time, $db['time']);
         $this->assertSame($author, $db['author']);
         $this->assertSame($license, $db['license']);
@@ -242,6 +244,7 @@ class DatabaseTest extends TestCase
                 'RLD' => 0,
                 'RLUF' => '',
                 'RGMUF' => '',
+
             ),
             'meta' => array(),
             'index' => array(),
@@ -258,9 +261,9 @@ class DatabaseTest extends TestCase
         $result['header']['control'] = $meta['control'];
         $header = fread($db, $result['header']['size']);
         $offset = 0;
-        $meta = Pack::unpack('Cversion/ImaxItemLen/CRGC/SRGF/SRGD/CRLC/CRLF/SRLD', substr($header,$offset,14));
+        $meta = Pack::unpack('Cversion/CRGC/SRGF/SRGD/CRLC/CRLF/SRLD', substr($header,$offset,10));
         $result['header'] = array_replace($result['header'], $meta);
-        $offset += 14;
+        $offset += 10;
         $unpack = 'A'.$meta['RLF'].'RLUF/A'.$meta['RGF'].'RGMUF';
         $size = $meta['RLF']+$meta['RGF'];
         $meta = Pack::unpack($unpack, substr($header, $offset, $size));
@@ -292,20 +295,25 @@ class DatabaseTest extends TestCase
         $offset += $result['header']['RGD'];
         $result['index'] = array_values(unpack('I*',substr($header, $offset)));
 
-        for ($i=0;$i<$result['meta']['networks']['n'];$i++) {
+        for ($i=0;$i<$result['meta']['networks']['items'];$i++) {
             $data = Pack::unpack(
                 'N_ip/'.$result['meta']['networks']['format'],
-                fread($db, $result['meta']['networks']['s'])
+                fread($db, $result['meta']['networks']['len'])
             );
             $data['_ip'] = long2ip($data['_ip']);
             $result['networks'][] = $data;
         }
 
         foreach ($result['meta']['registers'] as $register=>$data) {
-            $registerData[$register] = fread($db, $data['n']);
+            for ($id=0;$id<=$data['items'];$id++) {
+                $result['registers'][$register][$id] = Pack::unpack(
+                    $data['format'],
+                    fread($db, $data['len'])
+                );
+            }
         }
 
-        $meta = Pack::unpack('Itime/~author/A*license', fread($db, filesize($dbFile)));
+        $meta = Pack::unpack('Itime/A128author/A*license', fread($db, filesize($dbFile)));
         $result = array_replace($result, $meta);
         fclose($db);
         return $result;
