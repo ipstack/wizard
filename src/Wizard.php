@@ -89,10 +89,11 @@ class Wizard
         ),
         'networks' => array(
             'format' => '',
-            'len' => 4,
-            'items' => 0,
+            's' => 4,
+            'n' => 0,
             'fields' => array(),
         ),
+        'maxItemLen' => 0,
     );
 
     /**
@@ -608,7 +609,8 @@ class Wizard
         foreach ($this->networks as $network) {
             foreach ($network['map'] as $register) {
                 $innerSql = 'SELECT `_pk` FROM `'.$register.'` GROUP BY `_pk`';
-                $sql = 'DELETE FROM `_ips` WHERE  WHERE `parameter` = "'.$register.'" AND `value` NOT IN ('.$innerSql.');';
+                $sql = 'DELETE FROM `_ips` WHERE  WHERE `parameter` = "'.$register.'" AND `value` NOT IN ('
+                    .$innerSql.');';
                 $this->pdo->exec($sql);
             }
         }
@@ -642,12 +644,14 @@ class Wizard
                             }
                             break;
                         default:
-                            $fieldClassName = __NAMESPACE__.'\\Field\\'.mb_convert_case($data['type'], \MB_CASE_TITLE).'Field';
+                            $fieldClassName = __NAMESPACE__.'\\Field\\'
+                                .mb_convert_case($data['type'], \MB_CASE_TITLE).'Field';
                             /**
                              * @var FieldAbstract $validator
                              */
                             $validator = new $fieldClassName($field, $data);
-                            $sql = 'SELECT MAX(`' . $field . '`) AS `max`, MIN(`' . $field . '`) AS `min` FROM `' . $table . '`;';
+                            $sql = 'SELECT MAX(`' . $field . '`) AS `max`, MIN(`' . $field . '`) AS `min` FROM `'
+                                . $table . '`;';
                             $res = $this->pdo->query($sql);
                             $row = $res->fetch();
                             $validator->update($row['min']);
@@ -662,8 +666,8 @@ class Wizard
             $bin = Pack::pack($pack, $empty);
 
             $this->meta['registers'][$table]['format'] = $pack;
-            $this->meta['registers'][$table]['len'] = strlen($bin);
-            $this->meta['registers'][$table]['items'] = 0;
+            $this->meta['registers'][$table]['s'] = strlen($bin);
+            $this->meta['registers'][$table]['n'] = 0;
             $this->meta['registers'][$table]['fields'] = $empty;
         }
     }
@@ -680,7 +684,7 @@ class Wizard
         $empty =  $this->meta['registers'][$register]['fields'];
         $bin = Pack::pack($format, $empty);
         fwrite($file, $bin);
-        $offset = 0;
+        $offset = strlen($bin);
         $select = array(
             '*' => '`'.$register.'`.*',
         );
@@ -708,13 +712,19 @@ class Wizard
                 if (!empty($cellValue)) $check = 1;
             }
             $bin = Pack::pack($format, $row);
+            $binLen = strlen($bin);
             if ($check) {
-                $offset ++;
+                if ($binLen > $this->meta['maxItemLen']) {
+                    $this->meta['maxItemLen'] = $binLen;
+                }
+                $offset += $binLen;
                 fwrite($file,$bin);
             }
-
-            $this->pdo->exec('UPDATE `'.$register.'` SET `_offset` =\''.($check?$offset:0).'\' WHERE `_pk` = \''.$rowId.'\';');
-            $this->pdo->exec('UPDATE `_ips` SET `offset` =\''.($check?$offset:0).'\' WHERE `parameter` = \''.$register.'\' AND `value`=\''.$rowId.'\';');
+            $sql = 'UPDATE `'.$register.'` SET `_offset` =\''.($check?$offset:0).'\' WHERE `_pk` = \''.$rowId.'\';';
+            $this->pdo->exec($sql);
+            $sql = 'UPDATE `_ips` SET `offset` =\''.($check?$offset:0).'\' WHERE `parameter` = \''
+                .$register.'\' AND `value`=\''.$rowId.'\';';
+            $this->pdo->exec($sql);
 
             $transactionIterator += 2;
             if ($transactionIterator > 100000) {
@@ -723,7 +733,7 @@ class Wizard
                 $transactionIterator = 0;
             }
         }
-        $this->meta['registers'][$register]['items'] = $offset;
+        $this->meta['registers'][$register]['n'] = $offset;
         $this->pdo->commit();
         fclose($file);
     }
@@ -747,7 +757,11 @@ class Wizard
         $format = array();
         foreach ($fields as $register=>$null) {
             $values[$register] = array();
-            $format[$register] = Pack::getOptimalFormat(0, $this->meta['registers'][$register]['items'], $register);
+            $format[$register] = Pack::getOptimalFormat(
+                0,
+                $this->meta['registers'][$register]['n'],
+                $register
+            );
         }
 
 
@@ -755,7 +769,7 @@ class Wizard
 
         $pack = $this->meta['networks']['format'];
         $binaryPrevData = Pack::pack($pack, $fields);
-        $this->meta['networks']['len'] += strlen($binaryPrevData);
+        $this->meta['networks']['s'] += strlen($binaryPrevData);
         $offset = 0;
         $this->meta['index'][0] = 0;
         $file = fopen($this->prefix.'.networks.dat','w');
@@ -796,7 +810,7 @@ class Wizard
                 fwrite($file, pack('N', $ip) . $binaryData);
             }
         }
-        $this->meta['networks']['items'] = $offset;
+        $this->meta['networks']['n'] = $offset;
         for($i=1;$i<=255;$i++) {
             if (!isset($this->meta['index'][$i])) $this->meta['index'][$i] = $this->meta['index'][$i-1];
         }
@@ -818,26 +832,33 @@ class Wizard
         $header = pack('C', self::FORMAT_VERSION);
 
         /*
+         * Maximal length of register item
+         */
+        $header .= pack('I', $this->meta['maxItemLen']);
+
+        /*
          * Registers count.
          */
         $header .= pack('C', count($this->meta['registers']));
 
-
         $rnmLen = 1;
         $pckLen = strlen($this->meta['networks']['format']);
-        $lenMax = $this->meta['networks']['len'];
-        $itmMax = $this->meta['networks']['items'];
+        $numMax = $this->meta['networks']['n'];
+        $registerOffset = filesize($this->prefix.'.networks.dat');;
         foreach ($this->meta['registers'] as $registerName => $register) {
+            $this->meta['registers'][$registerName]['s'] = $registerOffset;
+            $file = $this->prefix.'.reg.'.$registerName.'.dat';
+            $registerOffset += filesize($file);
             if (strlen($registerName) > $rnmLen) $rnmLen = strlen($registerName);
             if (strlen($register['format']) > $pckLen) $pckLen = strlen($register['format']);
-            if ($register['len'] > $lenMax) $lenMax = $register['len'];
-            if ($register['items'] > $itmMax) $itmMax = $register['items'];
+            if ($register['n'] > $numMax) $numMax = $register['n'];
         }
         $rnm = 'A'.$rnmLen.'name';
         $pck = 'A'.$pckLen.'format';
-        $len = Pack::getOptimalFormat(0, $lenMax, 'len');
-        $itm = Pack::getOptimalFormat(0, $itmMax, 'items');
-        $format = $rnm.'/'.$pck.'/'.$len.'/'.$itm;
+        $sizeMax = ($this->meta['networks']['s'] > $registerOffset)?$this->meta['networks']['s']:$registerOffset;
+        $size = Pack::getOptimalFormat(0, $sizeMax, 's');
+        $itm = Pack::getOptimalFormat(0, $numMax, 'n');
+        $format = $rnm.'/'.$pck.'/'.$size.'/'.$itm;
 
         /*
          * Size of registers definition unpack format.
@@ -850,8 +871,8 @@ class Wizard
         $empty = array(
             'name' => '',
             'format' => '',
-            'len' => 0,
-            'items' => 0,
+            's' => 0,
+            'n' => 0,
         );
         $header .= pack('S',strlen(Pack::pack($format, $empty)));
 
@@ -902,8 +923,8 @@ class Wizard
                 array(
                     'name' => $registerName,
                     'format' => $register['format'],
-                    'len' => $register['len'],
-                    'items' => $register['items']
+                    's' => $register['s'],
+                    'n' => $register['n']
                 )
             );
         }
@@ -916,8 +937,8 @@ class Wizard
             array(
                 'name' => 'n',
                 'format' => $this->meta['networks']['format'],
-                'len' => $this->meta['networks']['len'],
-                'items' => $this->meta['networks']['items']
+                's' => $this->meta['networks']['s'],
+                'n' => $this->meta['networks']['n']
             )
         );
 
@@ -978,12 +999,13 @@ class Wizard
             fclose($stream);
             if (is_writable($file)) unlink($file);
         }
-
-        $time = empty($this->time)?time():$this->time;
-        fwrite($database,pack('I1A128',$time,$this->author));
-        fwrite($database,pack('A*',$this->license));
+        $data = array(
+            'time' => empty($this->time)?time():$this->time,
+            'author' => $this->author,
+            'license' => $this->license,
+        );
+        fwrite($database,pack::pack('Itime/~author/A*license', $data));
         fclose($database);
-
         rename($tmp, $fileName);
     }
 }
