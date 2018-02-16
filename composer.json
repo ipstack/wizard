@@ -1,9 +1,13 @@
 {
   "name": "ipstack/wizard",
+<<<<<<< HEAD
   "version": "2.0.0-beta",
   "time": "2018-02-15 15:27:46",
+=======
+  "version": "1.0.0",
+>>>>>>> parent of fd28638... add time to composer.json
   "type": "library",
-  "description": "Wizard for create databases for ipstack",
+  "description": "Wizard for create databases for ipstack wizard",
   "keywords": ["iptool", "ipstack", "ipstack-wizard", "ip", "geo", "geoip", "info", "data", "ip-database", "wizard"],
   "license": "MIT",
   "authors": [
