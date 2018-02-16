@@ -818,9 +818,9 @@ class Wizard
             if (false === $ipnum or false === $prefix) {
                 return $result;
             }
-            $netsize = 1 << (32 - $prefix);
+            $netsize = pow(2, (32 - $prefix));
             $end_num = $ipnum + $netsize - 1;
-            if ($end_num >= (1 << 32)) {
+            if ($end_num >= pow(2, 32)) {
                 return $result;
             }
             $result['first'] = $ipnum;
