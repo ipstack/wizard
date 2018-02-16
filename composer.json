@@ -1,7 +1,6 @@
 {
   "name": "ipstack/wizard",
-  "version": "1.0.0",
-  "time": "2018-01-14",
+  "version": "1.0.1",
   "type": "library",
   "description": "Wizard for create databases for ipstack",
   "keywords": ["iptool", "ipstack", "ipstack-wizard", "ip", "geo", "geoip", "info", "data", "ip-database", "wizard"],
