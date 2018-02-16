@@ -1,13 +1,9 @@
 {
   "name": "ipstack/wizard",
-<<<<<<< HEAD
-  "version": "2.0.0-beta",
-  "time": "2018-02-15 15:27:46",
-=======
   "version": "1.0.0",
->>>>>>> parent of fd28638... add time to composer.json
+  "time": "2018-01-14",
   "type": "library",
-  "description": "Wizard for create databases for ipstack wizard",
+  "description": "Wizard for create databases for ipstack",
   "keywords": ["iptool", "ipstack", "ipstack-wizard", "ip", "geo", "geoip", "info", "data", "ip-database", "wizard"],
   "license": "MIT",
   "authors": [
@@ -19,11 +15,7 @@
   ],
   "require": {
     "php": ">=5.3",
-    "ext-pdo_sqlite": "*",
-    "ddrv/extra-pack": "*"
-  },
-  "require-dev": {
-    "phpunit/phpunit": ">=4.8"
+    "ext-pdo_sqlite": "*"
   },
   "autoload": {
     "psr-4": {
