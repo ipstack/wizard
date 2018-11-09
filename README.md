@@ -8,4 +8,8 @@
 
 > IP Stack Wizard. Create your IP Address database.
 
+## Supported formats
+
+- IPStack v1
+
 The idea is taken from [Sypex Geo](https://sypexgeo.net)

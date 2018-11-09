@@ -1,6 +1,6 @@
 {
   "name": "ipstack/wizard",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "type": "library",
   "description": "Wizard for create databases for ipstack",
   "keywords": ["iptool", "ipstack", "ipstack-wizard", "ip", "geo", "geoip", "info", "data", "ip-database", "wizard"],
@@ -14,7 +14,9 @@
   ],
   "require": {
     "php": ">=5.3",
-    "ext-pdo_sqlite": "*"
+    "ext-pdo_sqlite": "*",
+    "ext-pdo": "*",
+    "ext-mbstring": "*"
   },
   "autoload": {
     "psr-4": {
