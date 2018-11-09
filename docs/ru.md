@@ -186,7 +186,9 @@
     - \Ipstack\Wizard\Wizard::FORMAT_IPSTACK_V1 - IPStack версии 1
     ```
 
-# 3. Формат базы данных
+# 3. Форматы баз данных
+
+## 3.1 IPStack v1
 
 |Размер|Описание|
 |---|---|
