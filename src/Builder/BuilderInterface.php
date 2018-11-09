@@ -7,7 +7,8 @@ interface BuilderInterface
 
     /**
      * @param string $file
+     * @param array $options
      * @return void
      */
-    public function build($file);
+    public function build($file, $options=array());
 }

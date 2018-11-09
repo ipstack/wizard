@@ -3,7 +3,8 @@
 namespace Ipstack\Wizard;
 
 use Ipstack\Wizard\Builder\BuilderInterface;
-use Ipstack\Wizard\Builder\IpstackVersion1;
+use Ipstack\Wizard\Builder\IpstackVer1;
+use Ipstack\Wizard\Builder\SxGeoVer22;
 use Ipstack\Wizard\Database\Database;
 use Ipstack\Wizard\Exception\FieldNotFound;
 use Ipstack\Wizard\Exception\IncorrectFieldName;
@@ -17,6 +18,7 @@ class Wizard
 {
 
     const FORMAT_IPSTACK_V1 = 'ipstack-v1';
+    const FORMAT_SXGEO_V2_2 = 'sxgeo-v2.2';
 
     const TYPE_INT    = Database::TYPE_INT;
     const TYPE_FLOAT  = Database::TYPE_FLOAT;
@@ -123,22 +125,26 @@ class Wizard
     /**
      * @param string $version
      * @param string $file
+     * @param array $options
      * @throws RegisterNotFound
      * @return $this
      */
-    public function build($version, $file)
+    public function build($version, $file, $options = array())
     {
         $this->database->clear();
         switch ($version) {
             case self::FORMAT_IPSTACK_V1:
-                $builder = new IpstackVersion1($this->database);
+                $builder = new IpstackVer1($this->database);
+                break;
+            case self::FORMAT_SXGEO_V2_2:
+                $builder = new SxGeoVer22($this->database);
                 break;
             default:
                 $builder = null;
                 break;
         }
         if ($builder instanceof BuilderInterface) {
-            $builder->build($file);
+            $builder->build($file, $options);
         }
         return $this;
     }

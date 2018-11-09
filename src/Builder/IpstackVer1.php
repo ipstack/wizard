@@ -5,7 +5,7 @@ namespace Ipstack\Wizard\Builder;
 use Ipstack\Wizard\Database\Database;
 use Ipstack\Wizard\Exception\RegisterNotFound;
 
-class IpstackVersion1 implements BuilderInterface
+class IpstackVer1 implements BuilderInterface
 {
 
     const VERSION = 1;
@@ -41,9 +41,11 @@ class IpstackVersion1 implements BuilderInterface
 
     /**
      * @param string $file
+     * @param array $options
+     * @return void
      * @throws RegisterNotFound
      */
-    public function build($file)
+    public function build($file, $options=array())
     {
         $files['register'] = $this->createRegisters();
         $files['network'] = $this->createNetwork();
