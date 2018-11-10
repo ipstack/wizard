@@ -83,7 +83,7 @@ class IpstackVer1 implements BuilderInterface
         if ($headerLen > 255) $letter = 'I';
 
         /* Create binary database */
-        $database = fopen($file,'w');
+        $database = fopen($file, 'wb');
         fwrite($database, self::CONTROL . $letter . pack($letter, $headerLen) . $header);
 
         /* Write networks to database */

@@ -28,6 +28,11 @@ class Wizard
     const TYPE_CHAR   = Database::TYPE_CHAR;
 
     /**
+     * @var array
+     */
+    protected $options = array();
+
+    /**
      * @var Database
      */
     protected $database;
@@ -123,13 +128,40 @@ class Wizard
     }
 
     /**
+     * @param string $option
+     * @param mixed $value
+     * @return $this
+     */
+    public function setOption($option, $value)
+    {
+        $this->options[$option] = $value;
+        return $this;
+    }
+
+    /**
+     * @return array
+     */
+    public function getOptions()
+    {
+        return $this->options;
+    }
+
+    /**
+     * @param string $option
+     * @return mixed
+     */
+    public function getOption($option)
+    {
+        return array_key_exists($option, $this->options)?$this->options[$option]:null;
+    }
+
+    /**
      * @param string $version
      * @param string $file
-     * @param array $options
      * @throws RegisterNotFound
      * @return $this
      */
-    public function build($version, $file, $options = array())
+    public function build($version, $file)
     {
         $this->database->clear();
         switch ($version) {
@@ -144,7 +176,7 @@ class Wizard
                 break;
         }
         if ($builder instanceof BuilderInterface) {
-            $builder->build($file, $options);
+            $builder->build($file, $this->options);
         }
         return $this;
     }
