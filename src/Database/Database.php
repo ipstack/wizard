@@ -18,14 +18,14 @@ use PDOStatement;
 class Database
 {
 
-    const TYPE_INT = 'int';
-    const TYPE_FLOAT = 'float';
+    const TYPE_INT    = 'int';
+    const TYPE_FLOAT  = 'float';
     const TYPE_DOUBLE = 'double';
     const TYPE_NUMBER = 'number';
     const TYPE_STRING = 'string';
-    const TYPE_CHAR = 'char';
+    const TYPE_CHAR   = 'char';
 
-    const ACTION_ADD = 'add';
+    const ACTION_ADD    = 'add';
     const ACTION_REMOVE = 'remove';
 
     /**

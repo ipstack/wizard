@@ -4,7 +4,7 @@ namespace Ipstack\Wizard;
 
 use Ipstack\Wizard\Builder\BuilderInterface;
 use Ipstack\Wizard\Builder\IpstackVer1;
-use Ipstack\Wizard\Builder\SxGeoVer22;
+use Ipstack\Wizard\Builder\SxGeoVer2Dot2;
 use Ipstack\Wizard\Database\Database;
 use Ipstack\Wizard\Exception\FieldNotFound;
 use Ipstack\Wizard\Exception\IncorrectFieldName;
@@ -169,7 +169,7 @@ class Wizard
                 $builder = new IpstackVer1($this->database);
                 break;
             case self::FORMAT_SXGEO_V2_2:
-                $builder = new SxGeoVer22($this->database);
+                $builder = new SxGeoVer2Dot2($this->database);
                 break;
             default:
                 $builder = null;
